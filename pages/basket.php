@@ -30,9 +30,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if ($action === 'save_file') {
-        $result = voucherSaveOrderToFile($order);
-        voucherSetFlash($result['message'], $result['ok'] ? 'success' : 'error');
-        voucherRedirect('basket.php');
+        voucherDownloadSpreadsheet($order);
     }
 }
 

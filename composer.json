@@ -1,0 +1,6 @@
+{
+    "name": "voucher/autosalon",
+    "require": {
+        "phpoffice/phpspreadsheet": "^1.29"
+    }
+}

@@ -494,6 +494,224 @@ function voucherExtractSurname(string $name): string
     return $surname;
 }
 
+function voucherBuildSpreadsheet(array $order): \PhpOffice\PhpSpreadsheet\Spreadsheet
+{
+    $template = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'templates' . DIRECTORY_SEPARATOR . 'voucher_template.xlsx';
+
+    if (is_file($template)) {
+        $spreadsheet = \PhpOffice\PhpSpreadsheet\IOFactory::load($template);
+    } else {
+        $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+    }
+
+    $sheet = $spreadsheet->getActiveSheet();
+
+    // ==================================================
+    // 1. ШАПКА (Организация + Автосалон)
+    // ==================================================
+    $sheet->setCellValue('C1', 'Организация');
+    $sheet->setCellValue('E1', 'Автосалон');
+    
+    // Накладная и номер в одной строке
+    $sheet->mergeCells('C2:D2');
+    $sheet->setCellValue('C2', 'Накладная №');
+    $sheet->getStyle('C2')->getFont()->setBold(true);
+    $sheet->setCellValue('E2', random_int(1000, 9999));
+    $sheet->getStyle('E2')->getFont()->setBold(true);
+    
+    $sheet->setCellValue('I1', 'Дата:');
+    $sheet->setCellValue('I2', date('d.m.Y'));
+
+    // ==================================================
+    // 2. ЛЕВАЯ ТАБЛИЦА (атрибуты, без границ, выравнивание по левому краю)
+    // ==================================================
+    $leftAttributes = [
+        ['label' => 'Тип услуги:',        'value' => $order['service']['label']],
+        ['label' => 'Базовая цена',       'value' => $order['amounts']['base']],
+        ['label' => 'Машина',             'value' => $order['car']['label']],
+        ['label' => 'Количество дней',    'value' => $order['days']],
+        ['label' => 'Итоговая сумма для лизинга и проката:', 'value' => $order['amounts']['days_charge']],
+    ];
+
+    $row = 4;
+    foreach ($leftAttributes as $attr) {
+        $sheet->setCellValue('A' . $row, $attr['label']);
+        $sheet->setCellValue('G' . $row, $attr['value']);
+        $sheet->getStyle('G' . $row)->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_LEFT);
+        
+        if ($attr['label'] === 'Итоговая сумма для лизинга и проката:') {
+            $sheet->getStyle('A' . $row)->getFont()->setBold(true);
+            $sheet->getStyle('G' . $row)->getFont()->setBold(true);
+        }
+        $row++;
+    }
+
+    // ==================================================
+    // 3. ТАБЛИЦА "Предварительная подготовка"
+    // ==================================================
+    $prepStartRow = $row + 1;
+    
+    $sheet->mergeCells('A' . $prepStartRow . ':D' . $prepStartRow);
+    $sheet->setCellValue('A' . $prepStartRow, 'Предварительная подготовка');
+    $sheet->getStyle('A' . $prepStartRow)->getFont()->setBold(true);
+    $sheet->getStyle('A' . $prepStartRow)->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER);
+    
+    // Данные таблицы: Наценка за машину, Код услуги, затем доп услуги
+    $prepDataStart = $prepStartRow + 1;
+    
+    // Строка 1: Наценка за машину
+    $sheet->setCellValue('A' . $prepDataStart, '1');
+    $sheet->setCellValue('B' . $prepDataStart, 'Наценка за машину');
+    $sheet->mergeCells('B' . $prepDataStart . ':C' . $prepDataStart);
+    $sheet->setCellValue('D' . $prepDataStart, $order['amounts']['car']);
+    
+    // Строка 2: Код услуги
+    $sheet->setCellValue('A' . ($prepDataStart + 1), '2');
+    $sheet->setCellValue('B' . ($prepDataStart + 1), 'Код услуги');
+    $sheet->mergeCells('B' . ($prepDataStart + 1) . ':C' . ($prepDataStart + 1));
+    $sheet->setCellValue('D' . ($prepDataStart + 1), $order['prep_code']);
+    
+    // Строки 3+: Дополнительные услуги (всегда 3 штуки, но с нулевой ценой если не выбраны)
+    $allPreparations = [
+        'fuel' => 'Бензин',
+        'tires' => 'Шины',
+        'washer' => 'Омыватель',
+        'polish' => 'Полировка',
+        'interior_cleaning' => 'Чистка салона',
+        'service' => 'ТО',
+        'engine_cleaning' => 'Чистка двигателя',
+    ];
+    
+    // Собираем выбранные услуги в массив для быстрого доступа
+    $selectedPrepMap = [];
+    foreach ($order['preparations'] as $prep) {
+        $selectedPrepMap[$prep['label']] = $prep['price'];
+    }
+    
+    // Определяем какие услуги показывать в зависимости от типа услуги
+    $serviceKey = $order['service_key'];
+    $prepKeysToShow = [];
+    
+    if ($serviceKey === 'rental') {
+        $prepKeysToShow = ['fuel', 'tires', 'washer'];
+    } elseif ($serviceKey === 'sale') {
+        $prepKeysToShow = ['polish', 'interior_cleaning', 'service'];
+    } elseif ($serviceKey === 'leasing') {
+        $prepKeysToShow = ['fuel', 'interior_cleaning', 'engine_cleaning'];
+    }
+    
+    $currentRow = $prepDataStart + 2;
+    $prepIndex = 3;
+    foreach ($prepKeysToShow as $key) {
+        $label = $allPreparations[$key];
+        $price = isset($selectedPrepMap[$label]) ? $selectedPrepMap[$label] : 0;
+        
+        $sheet->setCellValue('A' . $currentRow, $prepIndex);
+        $sheet->setCellValue('B' . $currentRow, $label);
+        $sheet->mergeCells('B' . $currentRow . ':C' . $currentRow);
+        $sheet->setCellValue('D' . $currentRow, $price);
+        
+        $currentRow++;
+        $prepIndex++;
+    }
+    
+    $prepTotalRow = $currentRow;
+    // Итого вне таблицы (без обводки)
+    $sheet->setCellValue('C' . $prepTotalRow, 'Итого:');
+    $sheet->setCellValue('D' . $prepTotalRow, $order['amounts']['preparations'] + $order['amounts']['car']);
+
+    $sheet->getStyle('A' . $prepStartRow . ':D' . ($prepTotalRow - 1))
+        ->getBorders()->getAllBorders()->setBorderStyle(\PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN);
+
+    // ==================================================
+    // 4. ТАБЛИЦА "Дополнительные опции"
+    // ==================================================
+    $rightStartCol = 'F';
+    $rightStartRow = $prepStartRow;
+    
+    $sheet->mergeCells($rightStartCol . $rightStartRow . ':I' . $rightStartRow);
+    $sheet->setCellValue($rightStartCol . $rightStartRow, 'Дополнительные опции');
+    $sheet->getStyle($rightStartCol . $rightStartRow)->getFont()->setBold(true);
+    $sheet->getStyle($rightStartCol . $rightStartRow)->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER);
+    // Данные таблицы: всегда 3 строки с опциями, невыбранные имеют цену 0
+    $rightDataStart = $rightStartRow + 1;
+    
+    $allExtraOptions = [
+        'leather' => 'Кожаный салон',
+        'heated_seats' => 'Подогрев сидений',
+        'sunroof' => 'Люк',
+    ];
+    
+    // Собираем выбранные опции
+    $selectedExtraMap = [];
+    foreach ($order['extra_options'] as $option) {
+        $selectedExtraMap[$option['label']] = $option['price'];
+    }
+    
+    $currentRightRow = $rightDataStart;
+    $extraIndex = 1;
+    foreach ($allExtraOptions as $key => $label) {
+        $price = isset($selectedExtraMap[$label]) ? $selectedExtraMap[$label] : 0;
+        
+        $sheet->setCellValue('F' . $currentRightRow, $extraIndex);
+        $sheet->setCellValue('G' . $currentRightRow, $label);
+        $sheet->mergeCells('G' . $currentRightRow . ':H' . $currentRightRow);
+        $sheet->setCellValue('I' . $currentRightRow, $price);
+        
+        $currentRightRow++;
+        $extraIndex++;
+    }
+    
+    $rightTotalRow = $currentRightRow;
+    
+    // Итого вне таблицы (без обводки)
+    $sheet->setCellValue('H' . $rightTotalRow, 'Итого:');
+    $sheet->setCellValue('I' . $rightTotalRow, $order['amounts']['extras']);
+
+    // Границы для всей таблицы (включая заголовок)
+    $sheet->getStyle('F' . $rightStartRow . ':I' . ($rightTotalRow - 1))
+        ->getBorders()->getAllBorders()->setBorderStyle(\PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN);
+
+    // ==================================================
+    // 5. ОБЩАЯ СТОИМОСТЬ (строка 20)
+    // ==================================================
+    $sheet->setCellValue('C20', 'Общая стоимость услуг:');
+    $sheet->getStyle('C20')->getFont()->setBold(true);
+    $sheet->setCellValue('F20', $order['amounts']['total']);
+    $sheet->getStyle('F20')->getFont()->setBold(true);
+    $sheet->setCellValue('H20', 'руб.');
+    $sheet->getStyle('H20')->getFont()->setBold(true);
+
+    // ==================================================
+    // 6. ЗАКАЗЧИК И МЕНЕДЖЕР
+    // ==================================================
+    $sheet->setCellValue('A22', 'Заказчик:');
+    $sheet->setCellValue('C22', $order['customer']['name']);
+    
+    $sheet->setCellValue('A23', 'Телефон:');
+    $sheet->setCellValue('C23', $order['customer']['phone']);
+    
+    $sheet->setCellValue('A24', 'Почта:');
+    $sheet->setCellValue('C24', $order['customer']['email']);
+    
+    $sheet->setCellValue('F22', 'Менеджер:');
+    $sheet->setCellValue('H22', 'Хасанов Г.У.');
+
+    // ==================================================
+    // 7. ПОДПИСЬ (строка 23 и 24)
+    // ==================================================
+    // Подпись в строке 23
+    $sheet->setCellValue('F23', 'Подпись:');
+    $sheet->mergeCells('G23:H23');
+    $sheet->setCellValue('G23', '_________________');
+    
+    // подпись заказчика в строке 24
+    $sheet->setCellValue('G24', '(подпись заказчика)');
+    $sheet->getStyle('G24')->getFont()->setItalic(true);
+
+    return $spreadsheet;
+}
+
 function voucherWriteSpreadsheet(array $order): array
 {
     if (!class_exists(\PhpOffice\PhpSpreadsheet\Spreadsheet::class)) {
@@ -504,73 +722,8 @@ function voucherWriteSpreadsheet(array $order): array
     $date = date('d-m-Y');
     $fileName = $surname . '_' . $date . '.xlsx';
     $target = dirname(__DIR__) . DIRECTORY_SEPARATOR . $fileName;
-    $template = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'templates' . DIRECTORY_SEPARATOR . 'voucher_template.xlsx';
-
     try {
-        if (is_file($template)) {
-            $spreadsheet = \PhpOffice\PhpSpreadsheet\IOFactory::load($template);
-        } else {
-            $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
-        }
-        $sheet = $spreadsheet->getActiveSheet();
-
-        $sheet->setCellValue('C1', 'Организация');
-        $sheet->setCellValue('E1', 'Автосалон');
-        $sheet->setCellValue('C2', 'Накладная №');
-        $sheet->setCellValue('F2', random_int(1000, 9999));
-        $sheet->setCellValue('I2', 'Дата: ' . date('d.m.Y'));
-
-        $sheet->setCellValue('A4', 'Тип услуги:');
-        $sheet->setCellValue('C4', $order['service']['label']);
-        $sheet->setCellValue('A5', 'Базовая цена');
-        $sheet->setCellValue('C5', $order['amounts']['base']);
-        $sheet->setCellValue('A6', 'Машина');
-        $sheet->setCellValue('C6', $order['car']['label']);
-        $sheet->setCellValue('D6', $order['amounts']['car']);
-        $sheet->setCellValue('A7', 'Количество дней');
-        $sheet->setCellValue('C7', $order['days']);
-        $sheet->setCellValue('A8', 'Итоговая сумма для лизинга и проката:');
-        $sheet->setCellValue('F8', $order['amounts']['days_charge']);
-
-        $sheet->setCellValue('A10', 'Предварительная подготовка');
-        $sheet->setCellValue('D10', 'Стоимость доп. опций');
-        $sheet->setCellValue('A11', 'Наценка за машину');
-        $sheet->setCellValue('C11', $order['amounts']['car']);
-        $sheet->setCellValue('A12', 'Код услуги');
-        $sheet->setCellValue('C12', $order['prep_code']);
-
-        $row = 13;
-        foreach ($order['preparations'] as $prep) {
-            $sheet->setCellValue('A' . $row, $prep['label']);
-            $sheet->setCellValue('C' . $row, $prep['price']);
-            $row++;
-        }
-        $sheet->setCellValue('B16', 'Итого');
-        $sheet->setCellValue('C16', $order['amounts']['preparations']);
-
-        $row = 11;
-        foreach ($order['extra_options'] as $index => $option) {
-            $sheet->setCellValue('F' . $row, 'Опция ' . ($index + 1));
-            $sheet->setCellValue('G' . $row, $option['label']);
-            $sheet->setCellValue('H' . $row, $option['price']);
-            $row++;
-        }
-        $sheet->setCellValue('G15', 'Итого');
-        $sheet->setCellValue('H15', $order['amounts']['extras']);
-
-        $sheet->setCellValue('C20', 'Общая стоимость услуг:');
-        $sheet->setCellValue('F20', $order['amounts']['total']);
-        $sheet->setCellValue('H20', 'руб.');
-
-        $sheet->setCellValue('A22', 'Заказчик:');
-        $sheet->setCellValue('C22', $order['customer']['name']);
-        $sheet->setCellValue('A23', 'Телефон:');
-        $sheet->setCellValue('C23', $order['customer']['phone']);
-        $sheet->setCellValue('A24', 'Почта:');
-        $sheet->setCellValue('C24', $order['customer']['email']);
-        $sheet->setCellValue('F22', 'Менеджер:');
-        $sheet->setCellValue('H22', 'Студент');
-
+        $spreadsheet = voucherBuildSpreadsheet($order);
         $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
         $writer->save($target);
     } catch (\Throwable $e) {
@@ -578,6 +731,40 @@ function voucherWriteSpreadsheet(array $order): array
     }
 
     return ['ok' => true, 'message' => 'Файл сохранен: ' . $fileName . '.'];
+}
+
+function voucherDownloadSpreadsheet(array $order): void
+{
+    if (file_exists(dirname(__DIR__) . DIRECTORY_SEPARATOR . 'vendor' . DIRECTORY_SEPARATOR . 'autoload.php')) {
+        require_once dirname(__DIR__) . DIRECTORY_SEPARATOR . 'vendor' . DIRECTORY_SEPARATOR . 'autoload.php';
+    }
+
+    if (!class_exists(\PhpOffice\PhpSpreadsheet\Spreadsheet::class)) {
+        $result = voucherWriteTextFile($order);
+        voucherSetFlash($result['message'], $result['ok'] ? 'success' : 'error');
+        voucherRedirect('basket.php');
+    }
+
+    try {
+        $spreadsheet = voucherBuildSpreadsheet($order);
+        $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+        $surname = voucherExtractSurname($order['customer']['name']);
+        $fileName = $surname . '_' . date('d-m-Y') . '.xlsx';
+
+        while (ob_get_level() > 0) {
+            ob_end_clean();
+        }
+
+        header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        header('Content-Disposition: attachment; filename="voucher.xlsx"; filename*=UTF-8\'\'' . rawurlencode($fileName));
+        header('Cache-Control: max-age=0');
+        $writer->save('php://output');
+        exit;
+    } catch (\Throwable $e) {
+        $result = voucherWriteTextFile($order);
+        voucherSetFlash('XLSX не удалось скачать, сохранено в basket.txt.', $result['ok'] ? 'success' : 'error');
+        voucherRedirect('basket.php');
+    }
 }
 
 function voucherSaveOrderToFile(array $order): array
