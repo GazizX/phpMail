@@ -7,7 +7,7 @@ require_once __DIR__ . '/../lib/voucher.php';
 if (isset($_POST['action']) && $_POST['action'] === 'logout') {
     voucherLogout();
     voucherSetFlash('Вы вышли из системы.', 'info');
-    voucherRedirect('../index.php');
+    voucherRedirect('../api/index.php');
 }
 
 if (!voucherIsAuthorized()) {
@@ -51,7 +51,7 @@ $image = voucherServiceImage($order['service_key']);
                 <td valign="top" width="583" height="208" background="../images/row1.gif">
                     <div style="margin-left:88px; margin-top:57px"><img src="../images/w1.gif"></div>
                     <div style="margin-left:50px; margin-top:69px">
-                        <a href="../index.php">Главная<img src="../images/m1.gif" border="0"></a>
+                        <a href="../api/index.php">Главная<img src="../images/m1.gif" border="0"></a>
                         <img src="../images/spacer.gif" width="20" height="10">
                         <a href="order.php">Заказ<img src="../images/m2.gif" border="0"></a>
                         <img src="../images/spacer.gif" width="5" height="10">
