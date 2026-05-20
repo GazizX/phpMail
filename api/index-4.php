@@ -5,14 +5,14 @@
 <link href="../css/style.css" rel="stylesheet" type="text/css">
 </head>
 
- <body topmargin="0" bottommargin="0" rightmargin="0"  leftmargin="0"   background="../images/back_main.gif">
- 
-            <table cellpadding="0" cellspacing="0" border="0"  align="center" width="583" height="614">
+<body topmargin="0" bottommargin="0" rightmargin="0"  leftmargin="0"   background="../images/back_main.gif">
+
+           <table cellpadding="0" cellspacing="0" border="0"  align="center" width="583" height="614">
             <tr>
                 <td valign="top" width="583" height="208" background="../images/row1.gif">
                     <div style="margin-left:88px; margin-top:57px "><img src="../images/w1.gif">    </div>
                     <div style="margin-left:50px; margin-top:69px ">
-                        <a href="../api/index.php">Главная<img src="../images/m1.gif" border="0" ></a>
+                        <a href="./index.php">Главная<img src="../images/m1.gif" border="0" ></a>
                         <img src="../images/spacer.gif" width="20" height="10">
                         <a href="order.php">Заказ<img src="../images/m2.gif" border="0" ></a>
                         <img src="../images/spacer.gif" width="5" height="10">

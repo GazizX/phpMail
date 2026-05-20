@@ -7,49 +7,42 @@ require_once __DIR__ . '/../lib/voucher.php';
 if (isset($_POST['action']) && $_POST['action'] === 'logout') {
     voucherLogout();
     voucherSetFlash('Вы вышли из системы.', 'info');
-    voucherRedirect('../api/index.php');
+    voucherRedirect('./index.php');
 }
 
 if (!voucherIsAuthorized()) {
     exit;
 }
 
-$step1 = $_SESSION[VOUCHER_DATA_KEY] ?? null;
-if (!is_array($step1) || !isset(voucherServices()[$step1['service'] ?? ''])) {
-    voucherSetFlash('Сначала оформите заявку на странице заказа.', 'error');
-    voucherRedirect('order.php');
-}
-
-$serviceKey = (string)$step1['service'];
-$cars = voucherCarsByService()[$serviceKey] ?? [];
-$preparationsConfig = voucherPreparationsByService()[$serviceKey] ?? ['code' => '', 'options' => []];
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && (string)($_POST['action'] ?? '') === 'bill_back') {
-    voucherRedirect('order.php');
-}
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && (string)($_POST['action'] ?? '') === 'bill_next') {
-    $data = voucherStep2FromRequest($_POST, $serviceKey);
-    $errors = voucherValidateStep2($data);
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && (string)($_POST['action'] ?? '') === 'order_next') {
+    $data = voucherStep1FromRequest($_POST);
+    $errors = voucherValidateStep1($data);
 
     if ($errors) {
         voucherSetFlash(implode(' ', $errors), 'error');
-        $_SESSION[VOUCHER_STEP2_KEY] = $data;
-        voucherRedirect('bill.php');
+        $_SESSION[VOUCHER_DATA_KEY] = $data;
+        voucherRedirect('order.php');
     }
 
-    $_SESSION[VOUCHER_STEP2_KEY] = $data;
-    voucherRedirect('basket.php');
+    $_SESSION[VOUCHER_DATA_KEY] = $data;
+    unset($_SESSION[VOUCHER_STEP2_KEY]);
+    voucherRedirect('bill.php');
 }
 
 $flash = voucherConsumeFlash();
-$step2 = $_SESSION[VOUCHER_STEP2_KEY] ?? [
-    'car' => '',
-    'preparations' => [],
-    'days' => 1,
-    'fast_sale' => 0,
-    'service' => $serviceKey,
+$services = voucherServices();
+$extraOptions = voucherExtraOptions();
+$step1 = $_SESSION[VOUCHER_DATA_KEY] ?? [
+    'service' => 'rental',
+    'name' => '',
+    'phone' => '',
+    'email' => '',
+    'extra_options' => [],
 ];
+
+if (!isset($services[$step1['service'] ?? ''])) {
+    $step1['service'] = 'rental';
+}
 ?>
 <html>
     <head>
@@ -62,9 +55,9 @@ $step2 = $_SESSION[VOUCHER_STEP2_KEY] ?? [
         <table cellpadding="0" cellspacing="0" border="0" align="center" width="583" height="614">
             <tr>
                 <td valign="top" width="583" height="208" background="../images/row1.gif">
-                    <div style="margin-left:88px; margin-top:57px"><img src="../images/w1.gif"></div>
-                    <div style="margin-left:50px; margin-top:69px">
-                        <a href="../api/index.php">Главная<img src="../images/m1.gif" border="0"></a>
+                    <div style="margin-left:88px; margin-top:57px "><img src="../images/w1.gif"></div>
+                    <div style="margin-left:50px; margin-top:69px ">
+                        <a href="./index.php">Главная<img src="../images/m1.gif" border="0"></a>
                         <img src="../images/spacer.gif" width="20" height="10">
                         <a href="order.php">Заказ<img src="../images/m2.gif" border="0"></a>
                         <img src="../images/spacer.gif" width="5" height="10">
@@ -94,24 +87,25 @@ $step2 = $_SESSION[VOUCHER_STEP2_KEY] ?? [
                                         <td width="492" valign="top" height="106">
                                             <div style="margin-left:1px; margin-top:2px; margin-right:10px"><br>
                                                 <div style="margin-left:5px"><img src="../images/1_p1.gif" align="left"></div>
-                                                <div style="margin-left:95px"><font class="title">Продолжение оформления</font><br></div>
+                                                <div style="margin-left:95px"><font class="title">Оформление заявки</font><br></div>
                                             </div>
                                         </td>
                                     </tr>
                                     <tr>
                                         <td width="492" valign="top" height="232">
-                                            <form method="post" action="bill.php">
+                                            <form method="post" action="order.php">
+                                                <input type="hidden" name="action" value="order_next">
                                                 <table cellpadding="0" cellspacing="0" border="0">
                                                     <tr>
                                                         <td valign="top" height="232" width="248">
                                                             <div style="margin-left:6px; margin-top:2px;"><img src="../images/hl.gif"></div>
                                                             <div style="margin-left:6px; margin-top:7px;"><img src="../images/1_w2.gif"></div>
                                                             <div style="margin-top:10px; margin-left:6px; font-size:12px;">
-                                                                <font class="title">Предварительная подготовка</font><br>
-                                                                <?php foreach (($preparationsConfig['options'] ?? []) as $prepKey => $prep): ?>
+                                                                <font class="title">Дополнительные опции</font><br>
+                                                                <?php foreach ($extraOptions as $optionKey => $option): ?>
                                                                     <label style="display:block; margin-top:4px;">
-                                                                        <input type="checkbox" name="preparations[]" value="<?= htmlspecialchars($prepKey, ENT_QUOTES, 'UTF-8') ?>" <?= in_array($prepKey, $step2['preparations'], true) ? 'checked' : '' ?>>
-                                                                        <?= htmlspecialchars($prep['label'] . ' (+' . $prep['price'] . ')', ENT_QUOTES, 'UTF-8') ?>
+                                                                        <input type="checkbox" name="extra_options[]" value="<?= htmlspecialchars($optionKey, ENT_QUOTES, 'UTF-8') ?>" <?= in_array($optionKey, $step1['extra_options'], true) ? 'checked' : '' ?>>
+                                                                        <?= htmlspecialchars($option['label'] . ' (+' . $option['price'] . ')', ENT_QUOTES, 'UTF-8') ?>
                                                                     </label>
                                                                 <?php endforeach; ?>
                                                             </div>
@@ -121,13 +115,14 @@ $step2 = $_SESSION[VOUCHER_STEP2_KEY] ?? [
                                                             <div style="margin-left:22px; margin-top:2px;"><img src="../images/hl.gif"></div>
                                                             <div style="margin-left:22px; margin-top:7px;"><img src="../images/1_w2.gif"></div>
                                                             <div style="margin-left:22px; margin-top:13px; font-size:12px;">
-                                                                <font class="title">Марка машины</font><br>
-                                                                <?php foreach ($cars as $carKey => $car): ?>
-                                                                    <label style="display:block; margin-top:4px;">
-                                                                        <input type="radio" name="car" value="<?= htmlspecialchars($carKey, ENT_QUOTES, 'UTF-8') ?>" <?= ($step2['car'] ?? '') === $carKey ? 'checked' : '' ?>>
-                                                                        <?= htmlspecialchars($car['label'] . ' (+' . $car['price'] . ')', ENT_QUOTES, 'UTF-8') ?>
-                                                                    </label>
-                                                                <?php endforeach; ?>
+                                                                <font class="title">Тип услуги</font><br>
+                                                                <select name="service" style="width:190px;">
+                                                                    <?php foreach ($services as $serviceKey => $service): ?>
+                                                                        <option value="<?= htmlspecialchars($serviceKey, ENT_QUOTES, 'UTF-8') ?>" <?= ($step1['service'] ?? '') === $serviceKey ? 'selected' : '' ?>>
+                                                                            <?= htmlspecialchars($service['label'] . ' (' . $service['base_price'] . ' руб.)', ENT_QUOTES, 'UTF-8') ?>
+                                                                        </option>
+                                                                    <?php endforeach; ?>
+                                                                </select>
                                                                 <div style="height:8px;"></div>
                                                                 <?php if ($flash): ?>
                                                                     <div style="color:<?= $flash['type'] === 'error' ? '#b00000' : '#116611' ?>; margin-bottom:8px;">
@@ -135,28 +130,19 @@ $step2 = $_SESSION[VOUCHER_STEP2_KEY] ?? [
                                                                     </div>
                                                                 <?php endif; ?>
 
-                                                                <font class="title">Условия</font><br><br>
-                                                                Код услуги: <b><?= htmlspecialchars((string)($preparationsConfig['code'] ?? ''), ENT_QUOTES, 'UTF-8') ?></b><br><br>
-
-                                                                <?php if ($serviceKey === 'sale'): ?>
-                                                                    <label>
-                                                                        <input type="checkbox" name="fast_sale" value="1" <?= !empty($step2['fast_sale']) ? 'checked' : '' ?>>
-                                                                        Ускоренное оформление
-                                                                    </label>
-                                                                <?php else: ?>
-                                                                    Количество дней:<br>
-                                                                    <input type="number" name="days" min="<?= $serviceKey === 'leasing' ? '30' : '1' ?>" value="<?= htmlspecialchars((string)max($serviceKey === 'leasing' ? 30 : 1, (int)($step2['days'] ?? 1)), ENT_QUOTES, 'UTF-8') ?>" style="width:80px;">
-                                                                <?php endif; ?>
-
-                                                                <div style="margin-top:18px;">
-                                                                    <button type="submit" formaction="order.php" formmethod="get" name="action" value="bill_back">Вернуться назад</button>
-                                                                    <button type="submit" name="action" value="bill_next">Далее</button>
-                                                                </div>
+                                                                <font class="title">Контактные данные</font><br><br>
+                                                                Имя:<br>
+                                                                <input type="text" name="name" value="<?= htmlspecialchars((string)($step1['name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" style="width:200px;"><br><br>
+                                                                Телефон:<br>
+                                                                <input type="text" name="phone" value="<?= htmlspecialchars((string)($step1['phone'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" style="width:200px;"><br><br>
+                                                                Почта:<br>
+                                                                <input type="text" name="email" value="<?= htmlspecialchars((string)($step1['email'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" style="width:200px;"><br><br>
+                                                                <button type="submit">Далее</button>
                                                             </div>
                                                             <div style="margin-left:22px; margin-top:16px;"><img src="../images/hl.gif"></div>
                                                             <div style="margin-left:22px; margin-top:7px;"><img src="../images/1_w4.gif"></div>
                                                             <div style="margin-left:22px; margin-top:9px; font-size:11px;">
-                                                                <?= htmlspecialchars(voucherServices()[$serviceKey]['description'], ENT_QUOTES, 'UTF-8') ?>
+                                                                <?= htmlspecialchars($services[$step1['service']]['description'], ENT_QUOTES, 'UTF-8') ?>
                                                             </div>
                                                         </td>
                                                     </tr>
@@ -173,7 +159,7 @@ $step2 = $_SESSION[VOUCHER_STEP2_KEY] ?? [
             </tr>
             <tr>
                 <td valign="top" width="583" height="68" background="../images/row3.gif">
-                    <div style="margin-left:51px; margin-top:31px">
+                    <div style="margin-left:51px; margin-top:31px ">
                         <a href="#"><img src="../images/p1.gif" border="0"></a>
                         <img src="../images/spacer.gif" width="26" height="9">
                         <a href="#"><img src="../images/p2.gif" border="0"></a>

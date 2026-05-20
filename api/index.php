@@ -13,7 +13,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if (voucherLogin($login, $password)) {
             voucherSetFlash('Вы успешно вошли как admin.', 'success');
-            voucherRedirect('../pages/order.php');
+            voucherRedirect('./order.php');
         }
 
         voucherSetFlash('Неверный логин или пароль.', 'error');
@@ -45,13 +45,13 @@ $flash = voucherConsumeFlash();
                     <div style="margin-left:50px; margin-top:69px ">
                         <a href="../index.php">Главная<img src="../images/m1.gif" border="0" ></a>
                         <img src="../images/spacer.gif" width="10" height="10">
-                        <a href="../pages/order.php">Заказ<img src="../images/m2.gif" border="0" ></a>
+                        <a href="./order.php">Заказ<img src="../images/m2.gif" border="0" ></a>
                         <img src="../images/spacer.gif" width="5" height="10">
-                        <a href="../pages/basket.php">Корзина<img src="../images/m3.gif" border="0" ></a>
+                        <a href="./basket.php">Корзина<img src="../images/m3.gif" border="0" ></a>
                         <img src="../images/spacer.gif" width="5" height="10">
-                        <a href="../pages/index-3.php">О компании<img src="../images/m4.gif" border="0" ></a>
+                        <a href="./index-3.php">О компании<img src="../images/m4.gif" border="0" ></a>
                         <img src="../images/spacer.gif" width="5" height="10">
-                        <a href="../pages/index-4.php">Контакты<img src="../images/m5.gif" border="0" ></a>
+                        <a href="./index-4.php">Контакты<img src="../images/m5.gif" border="0" ></a>
                     </div>
                     <div style="margin-left:350px; margin-top:8px; font-size:12px;">
                         <?php if ($isAuthorized): ?>
@@ -113,7 +113,7 @@ $flash = voucherConsumeFlash();
                                                                 </form>
                                                             <?php else: ?>
                                                                 <div style="margin-bottom:10px;">Доступ к заказу открыт.</div>
-                                                                <a href="../pages/order.php">Перейти к оформлению</a>
+                                                                <a href="./order.php">Перейти к оформлению</a>
                                                             <?php endif; ?>
                                                         </div>
                                                     </td>
@@ -138,7 +138,7 @@ $flash = voucherConsumeFlash();
                         <img src="../images/spacer.gif" width="30" height="9">
                         <a href="#"><img src="../images/p3.gif" border="0"></a>
                         <img src="../images/spacer.gif" width="149" height="9">
-                        <a href="../pages/index-5.php"><img src="../images/copyright.gif" border="0"></a>
+                        <a href="./index-5.php"><img src="../images/copyright.gif" border="0"></a>
                     </div>
                 </td>
             </tr>
