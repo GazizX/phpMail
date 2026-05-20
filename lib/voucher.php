@@ -122,6 +122,11 @@ function voucherServiceImageFile(string $service): string
 
 function voucherPublicBaseUrl(): string
 {
+    $envBaseUrl = trim((string)(getenv('VOUCHER_PUBLIC_BASE_URL') ?: getenv('APP_URL') ?: ''));
+    if ($envBaseUrl !== '') {
+        return rtrim($envBaseUrl, '/');
+    }
+
     $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
     $host = (string)($_SERVER['HTTP_HOST'] ?? '');
     $script = (string)($_SERVER['SCRIPT_NAME'] ?? '');
@@ -766,6 +771,17 @@ function voucherDownloadSpreadsheet(array $order): void
     }
 }
 
+function voucherResendConfig(): array
+{
+    return [
+        'api_key' => (string)(getenv('VOUCHER_RESEND_API_KEY') ?: ''),
+        'from_email' => (string)(getenv('VOUCHER_RESEND_FROM_EMAIL') ?: 'onboarding@resend.dev'),
+        'from_name' => (string)(getenv('VOUCHER_RESEND_FROM_NAME') ?: 'Voucher'),
+        'api_url' => 'https://api.resend.com/emails',
+        'timeout' => (int)(getenv('VOUCHER_RESEND_TIMEOUT') ?: 15),
+    ];
+}
+
 function voucherSaveOrderToFile(array $order): array
 {
     if (file_exists(dirname(__DIR__) . DIRECTORY_SEPARATOR . 'vendor' . DIRECTORY_SEPARATOR . 'autoload.php')) {
@@ -787,23 +803,82 @@ function voucherSaveOrderToFile(array $order): array
 
 function voucherSendMail(array $order): array
 {
+    $config = voucherResendConfig();
+
+    if ($config['api_key'] === '') {
+        return [
+            'ok' => false,
+            'message' => 'Заполните VOUCHER_RESEND_API_KEY для Resend.',
+        ];
+    }
+
     $to = $order['customer']['email'];
     $subject = 'Ваш заказ в автосалоне';
     $body = voucherBuildMailHtml($order);
+    $payload = json_encode([
+        'from' => $config['from_name'] . ' <' . $config['from_email'] . '>',
+        'to' => [$to],
+        'subject' => $subject,
+        'html' => $body,
+    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
-    $headers = [
-        'MIME-Version: 1.0',
-        'Content-type: text/html; charset=UTF-8',
-        'From: no-reply@voucher.local',
-    ];
-
-    $ok = @mail($to, $subject, $body, implode("\r\n", $headers));
-
-    if ($ok) {
-        return ['ok' => true, 'message' => 'Письмо успешно отправлено.'];
+    if ($payload === false) {
+        return ['ok' => false, 'message' => 'Не удалось подготовить запрос к Resend.'];
     }
 
-    return ['ok' => false, 'message' => 'Письмо не отправлено. На локальном сервере это ожидаемо без SMTP/хостинга.'];
+    $headers = [
+        'Authorization: Bearer ' . $config['api_key'],
+        'Content-Type: application/json',
+    ];
+
+    $responseBody = '';
+    $statusCode = 0;
+
+    if (function_exists('curl_init')) {
+        $ch = curl_init($config['api_url']);
+        curl_setopt_array($ch, [
+            CURLOPT_POST => true,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPHEADER => $headers,
+            CURLOPT_POSTFIELDS => $payload,
+            CURLOPT_TIMEOUT => $config['timeout'],
+        ]);
+        $responseBody = (string)curl_exec($ch);
+        $statusCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlError = curl_error($ch);
+        curl_close($ch);
+
+        if ($responseBody === '' && $curlError !== '') {
+            return ['ok' => false, 'message' => 'Resend запрос не удался: ' . $curlError];
+        }
+    } else {
+        $context = stream_context_create([
+            'http' => [
+                'method' => 'POST',
+                'header' => implode("\r\n", $headers),
+                'content' => $payload,
+                'timeout' => $config['timeout'],
+                'ignore_errors' => true,
+            ],
+        ]);
+
+        $responseBody = (string)@file_get_contents($config['api_url'], false, $context);
+        $statusLine = $http_response_header[0] ?? '';
+        if (preg_match('/\s(\d{3})\s/', $statusLine, $matches)) {
+            $statusCode = (int)$matches[1];
+        }
+    }
+
+    $decoded = json_decode($responseBody, true);
+    if ($statusCode >= 200 && $statusCode < 300 && is_array($decoded) && isset($decoded['id'])) {
+        return ['ok' => true, 'message' => 'Письмо успешно отправлено через Resend.'];
+    }
+
+    $errorMessage = is_array($decoded)
+        ? (string)($decoded['error']['message'] ?? $decoded['message'] ?? 'Неизвестная ошибка Resend.')
+        : 'Неизвестная ошибка Resend.';
+
+    return ['ok' => false, 'message' => $errorMessage];
 }
 
 function voucherRedirect(string $location): never
