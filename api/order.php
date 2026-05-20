@@ -19,26 +19,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (string)($_POST['action'] ?? '') ==
     $errors = voucherValidateStep1($data);
 
     if ($errors) {
-        voucherSetFlash(implode(' ', $errors), 'error');
+        $flash = ['type' => 'error', 'message' => implode(' ', $errors)];
         $_SESSION[VOUCHER_DATA_KEY] = $data;
-        voucherRedirect('order.php');
+        $step1 = $data;
+    } else {
+        $_SESSION[VOUCHER_DATA_KEY] = $data;
+        unset($_SESSION[VOUCHER_STEP2_KEY]);
+        voucherRedirect('bill.php');
     }
-
-    $_SESSION[VOUCHER_DATA_KEY] = $data;
-    unset($_SESSION[VOUCHER_STEP2_KEY]);
-    voucherRedirect('bill.php');
+} else {
+    $flash = voucherConsumeFlash();
+    $step1 = $_SESSION[VOUCHER_DATA_KEY] ?? [
+        'service' => 'rental',
+        'name' => '',
+        'phone' => '',
+        'email' => '',
+        'extra_options' => [],
+    ];
 }
 
-$flash = voucherConsumeFlash();
 $services = voucherServices();
 $extraOptions = voucherExtraOptions();
-$step1 = $_SESSION[VOUCHER_DATA_KEY] ?? [
-    'service' => 'rental',
-    'name' => '',
-    'phone' => '',
-    'email' => '',
-    'extra_options' => [],
-];
 
 if (!isset($services[$step1['service'] ?? ''])) {
     $step1['service'] = 'rental';
