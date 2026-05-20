@@ -344,20 +344,11 @@ function voucherCollectOrder(): ?array
 
     $daysCharge = 0;
     $fastSalePrice = 0;
-    if ($serviceKey === 'sale') {
-        $fastSalePrice = $fastSale ? 150 : 0;
-    } elseif ($serviceKey === 'leasing') {
-        $daysCharge = max(30, $days) * 20;
-    } else {
-        $daysCharge = max(1, $days) * 20;
-    }
 
     $total = (int)$service['base_price']
         + (int)$car['price']
         + $extrasTotal
-        + $preparationsTotal
-        + $daysCharge
-        + $fastSalePrice;
+        + $preparationsTotal;
 
     return [
         'customer' => [
@@ -622,6 +613,10 @@ function voucherBuildSpreadsheet(array $order): \PhpOffice\PhpSpreadsheet\Spread
 
     $sheet->getStyle('A' . $prepStartRow . ':D' . ($prepTotalRow - 1))
         ->getBorders()->getAllBorders()->setBorderStyle(\PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN);
+    $sheet->getStyle('A' . $prepStartRow . ':A' . ($prepTotalRow - 1))
+        ->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER);
+    $sheet->getStyle('D' . $prepStartRow . ':D' . ($prepTotalRow - 1))
+        ->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER);
 
     // ==================================================
     // 4. ТАБЛИЦА "Дополнительные опции"
@@ -671,6 +666,10 @@ function voucherBuildSpreadsheet(array $order): \PhpOffice\PhpSpreadsheet\Spread
     // Границы для всей таблицы (включая заголовок)
     $sheet->getStyle('F' . $rightStartRow . ':I' . ($rightTotalRow - 1))
         ->getBorders()->getAllBorders()->setBorderStyle(\PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN);
+    $sheet->getStyle('F' . $rightStartRow . ':F' . ($rightTotalRow - 1))
+        ->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER);
+    $sheet->getStyle('I' . $rightStartRow . ':I' . ($rightTotalRow - 1))
+        ->getAlignment()->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER);
 
     // ==================================================
     // 5. ОБЩАЯ СТОИМОСТЬ (строка 20)
