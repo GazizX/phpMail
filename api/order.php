@@ -94,7 +94,7 @@ if (!isset($services[$step1['service'] ?? ''])) {
                                     </tr>
                                     <tr>
                                         <td width="492" valign="top" height="232">
-                                            <form method="post" action="order.php">
+                                            <form method="post" action="">
                                                 <input type="hidden" name="action" value="order_next">
                                                 <table cellpadding="0" cellspacing="0" border="0">
                                                     <tr>
